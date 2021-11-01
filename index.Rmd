@@ -19,16 +19,23 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Morgan Klein mck2344
 
 #### Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+For this project, I will be joining a dataset from my Spotify streaming history with a dataset that lists many different songs along with different characteristics like popularity and danceability. My goal is to use this characteristic data imported from Kaggle and see how many of the songs I listen to are upbeat/happy songs, and how many are slow/sad songs. Additionally, the streaming data includes the date that I streamed each song, so I plan on compiling a timeline of what kinds of songs I'm listening to each day. This should provide insight on my past mental health.
 
 ```{R}
-# read your datasets in here, e.g., with read_csv()
+library(tidyverse)
 
+spotify <- read_csv("StreamingHistory0.csv")
+genre <- read_csv("test.csv")
+
+head(spotify)
+head(genre)
 ```
+
+
 
 #### Tidying: Reshaping
 
@@ -38,53 +45,100 @@ If your datasets are tidy already, demonstrate that you can reshape data with pi
 # your tidying code (if applicable; can also wait until wrangling section)
 ```
 
+*I will be reshaping in the wrangling section.*
     
 #### Joining/Merging
 
 ```{R}
-# your joining code
+library(tidyverse)
 
-# your joining code
+project1 <- left_join(spotify, genre, by = c("trackName"="Track Name", "artistName"="Artist Name"))
+
+head(project1)
+
+nrow(project1)
+ncol(project1)
+
+nrow(spotify)
+nrow(genre)
+
+anti_join(project1, spotify)
+anti_join(project1, genre)
+
+project1 %>% summarise(n(), n_distinct(endTime))
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+I joined the spotify and genre datasets using a left_join so I could keep as much information as possible. I joined them based on the song name and artist name. There are a total of 10,017 rows/observations in the combined dataset (project1) and 18 columns/variables. Many of the songs pulled from my streaming history are not found in the genre dataset, so many of the rows have corresponding NAs for characteristic data. These will be dropped during the wrangling portion of the project. There were 10,000 rows in the spotify dataset and 7,713 rows in the genre dataset. This should mean that 17 rows appear in the combined dataset that do not appear in the spotify data, but when I anti_join these two datasets, there are no rows that appear in project1 that do not appear in spotify. When I anti_join project1 and genre, there are 9,296 rows that appear in project1 but not genre. This is why so many of the rows have corresponding NAs. The ID variable in this dataset is the endTime (date and time of stream). There are 8,816 unique endTimes, meaning there are duplicates in the dataset.
+
+
 
 ####  Wrangling
 
 ```{R}
-# your wrangling code
+project1 <- project1 %>% na.omit
 
-# your wrangling code
+project1 %>% select(-msPlayed) -> project1
+project1 %>% select(-key) -> project1
+project1 %>% select(-loudness) -> project1
+project1 %>% select(-speechiness) -> project1
+project1 %>% select(-liveness) -> project1
+project1 %>% select(-valence) -> project1
+project1 %>% select(-time_signature) -> project1
 
-# your wrangling code
+project1 %>% rename("duration" = "duration_in min/ms") -> project1
+
+project1 %>% select(-duration) -> project1
+project1 %>% select(-mode) -> project1
+
+project1 %>% summarise(n(), n_distinct(endTime))
+
+project1 %>% separate(endTime, into = c("date", "time"), sep=" ") -> project1
+
+project1 %>% mutate("hype" = danceability*tempo*energy) -> project1
+
+project1 %>% group_by(artistName) %>% summarise("mean_tempo" = mean(tempo)) -> artist_tempo
+
+left_join(project1, artist_tempo) -> project1
+
+project1 %>% group_by(date) %>% summarise(mean_hype = mean(hype)) -> mean_hype
+
+left_join(project1, mean_hype) ->project1
+
+project1 %>% separate(time, into = c("hour", "minute", "second")) ->project1
+
+project1 %>% separate(date, into = c("year", "month", "day")) -> project1
+
+library(gt)
+
+gt(project1)
 ```
 
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+I started by removing all rows with NAs to ensure that I had characteristic data for all of my streams. Next, I used select- to remove all of the unnecessary variables that came in the genre dataset. I removed these variables because they will not help answer my questions posed in the introduction, and removing them from the dataset will help reduce clutter. I renamed the duration variable before removing it because R didn't like that the variable had a space in the name. I then determined how many duplicate times remained using n_distinct. There are 364 unique time stamps out of 376, which suggests that there are still duplicates, but upon further examination the duplicates are not really duplicates. I think I just skipped songs so quickly that they had the same time stamp. I then separated the endTime into date and time so that I can analyze the data based on the day as a whole. Next, I created a new column that is a combination of danceability, tempo, and energy. I called this column "hype" and it serves as a general category of how upbeat the song is based on each of those separate categories. I then added a column for the average tempo based on artist because I was curious about which artists generally have more upbeat songs and which generally have slower songs. I also added a column for the average hype each day. Lastly, I separated the date and time variables further to provide more graphing options.
 
 
 #### Visualizing
 
 ```{R}
-# your plot 1
+project1 %>% filter(year == "2021") %>% filter(month == "05") %>% ggplot(aes(day, hype)) + geom_boxplot() + geom_jitter(aes(color = artistName)) +theme(legend.position = "none") + scale_y_continuous(breaks = seq(0,100, 10)) + ggtitle("Daily Hype in May 2021") + xlab("Day") + ylab("Hype")
 ```
 
-Your discussion of plot 1
+This plot shows the "hype" level of every song streamed each day of May 2021. I chose to filter this figure down to just the one month because including every day in the dataset was much too crowded. I picked this month in particular because it was the last full month in the data. Based on the figure, the average "hype" does vary based on the day, but it is generally pretty centered around the 30-40 range. Days 17 and 18 appear to be particularly low on "hype", which correlates with sadder days based on my previously stated hypothesis that I listen to slower songs when I'm sad. The colors of the dots correlate with the artist. It was too crowded to include the legend on this figure, so my next figure will show the number of times that I listened to each artist this month.
 
 ```{R}
-# your plot 2
+project1 %>% filter(year == "2021") %>% filter(month == "05") %>% ggplot(aes(x = artistName, fill=artistName)) + geom_bar(stat = "count") + theme(legend.position = "none", axis.text.x = element_text(angle=45, hjust=1)) + ggtitle("Total Artist Streams in May 2021") + xlab("Artist") + ylab("Streams")
 ```
 
-Your discussion of plot 2
+This figure is a continuation of the previous figure. This shows the number of times that I streamed each artist in the month of May 2021. This helps explain why much of my "hype" from the last figure was centered around the same level most days, as I tended to listen to the same artists (Glass Animals especially) over and over again.
 
 ```{R}
-# your plot 3
+project1 %>% ggplot(aes(hour, instrumentalness)) + geom_boxplot() + geom_jitter(aes(color=month)) + scale_y_continuous(breaks = seq(0, 1, .1)) + ggtitle("Productivity by Hour and Month") + xlab("Hour") + ylab("Productivity (Instrumentalness)")
 ```
 
-Your discussion of plot 3
+This last plot uses the "instrumentalness" variable as an indicator of my productivity. This is because I usually listen to music without lyrics while studying, which have higher intrumental values. I decided to see which hours tended to have higher instrumental values to determine which hours are my most productive. Additionally, the points are colored based on the month to see which months were most productive, however this is difficult to determine due to the sheer number of points. Based on the figure, my most productive hour appears to be 18 (or 6pm).
 
 #### Concluding Remarks
 
-If any!
+My Spotify streaming data was used to make conclusions about my past moods and productivity based on assumptions about the kinds of music I generally listen to under different circumstances. One major limitation of this study is that my data was influenced by what was available in the characteristic data pulled from Kaggle. Therefore, much of my streaming data was dropped. This likely had a large impact on my findings.
 
 
 
